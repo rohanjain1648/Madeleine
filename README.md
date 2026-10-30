@@ -1,5 +1,7 @@
 # Madeleine: the taste of memory
 
+![Madeleine: the taste of memory](./public/cover.png)
+
 **An AI agent that rebuilds the cultural world of someone living with dementia** — the songs, films, faces, brands and places of their youth, matched to *their own* taste with Qloo's taste graph — and turns it into gentle reminiscence sessions that learn from every smile.
 
 Built for the [Qloo Agentic Hackathon](https://qloo.devpost.com/).
@@ -31,9 +33,123 @@ Every item Madeleine shows is a real Qloo entity. The LLM chooses and writes; it
 
 Privacy: profiles live only in the browser's localStorage. No accounts, no server database. Qloo responses are cached privately in server memory only.
 
+## Architecture
+
+```mermaid
+flowchart TD
+    %% ---------- Browser ----------
+    subgraph Browser["Browser (Next.js client)"]
+        Intake["Intake form<br/>name, birth year, hometown,<br/>favourites, avoid list<br/>(typed or spoken)"]
+        Theater["Agent theater<br/>live tool calls,<br/>developing pictures"]
+        Studio["Studio<br/>3D carousel, taste grooves,<br/>memory cards, timeline"]
+        Player["Session player<br/>vinyl + preview, Ken Burns,<br/>read-aloud, reactions"]
+        Card["Care card<br/>(printable)"]
+        Compare["Compare page<br/>plain AI vs Madeleine"]
+        Store[("localStorage<br/>profiles + reactions")]
+    end
+
+    %% ---------- Server ----------
+    subgraph Server["Next.js API routes (NDJSON streams)"]
+        Build["POST /api/build"]
+        Adapt["POST /api/adapt"]
+        CmpAPI["POST /api/compare"]
+
+        subgraph Agents["Agents on Groq (Vercel AI SDK tool loop)"]
+            Curator["Curator agent<br/>plans and calls Qloo tools"]
+            Designer["Designer agent<br/>structured output:<br/>portrait, why, session,<br/>sensory kit, outings, avoid"]
+            Reflector["Reflector agent<br/>boost what lit them up,<br/>exclude what upset them"]
+            Generic["Control group<br/>same model, no Qloo"]
+        end
+
+        Tools["Curator tools<br/>search_qloo · taste_fingerprint ·<br/>discover · rank_by_taste ·<br/>find_tags · finish"]
+        Filters["Server-side filters<br/>era (ages 10-30), age bucket,<br/>location, exclusions"]
+        Hydrate["Hydration<br/>validate entity ids,<br/>attach images + song previews"]
+        Cache[("Private in-memory<br/>Qloo cache")]
+    end
+
+    %% ---------- External ----------
+    subgraph External["External services"]
+        Qloo[["Qloo Taste AI<br/>/search · /v2/insights ·<br/>/v2/tags · urn:tag analysis"]]
+        Groq[["Groq<br/>gpt-oss-120b<br/>(gpt-oss-20b fallback)"]]
+        ITunes[["iTunes Search API<br/>30s song previews"]]
+    end
+
+    %% ---------- Build flow ----------
+    Intake -->|intake JSON| Build
+    Build --> Curator
+    Curator <-->|reasoning| Groq
+    Curator --> Tools
+    Tools --> Filters
+    Filters --> Cache
+    Cache <-->|X-Api-Key| Qloo
+    Tools -->|entity registry| Designer
+    Designer <-->|reasoning| Groq
+    Designer --> Hydrate
+    Hydrate --> ITunes
+    Build -. "streamed events" .-> Theater
+    Hydrate -->|profile| Store
+
+    %% ---------- Use ----------
+    Store --> Studio
+    Studio --> Player
+    Studio --> Card
+    Player -->|reactions + notes| Store
+
+    %% ---------- Learning loop ----------
+    Store -->|profile + last session| Adapt
+    Adapt --> Reflector
+    Reflector <-->|reasoning| Groq
+    Reflector -->|boosted seeds,<br/>exclusions| Tools
+    Reflector --> Designer
+    Adapt -. "next session" .-> Store
+
+    %% ---------- Comparison ----------
+    Studio --> Compare
+    Compare --> CmpAPI
+    CmpAPI --> Generic
+    Generic <--> Groq
+    CmpAPI -->|"score both lists on the<br/>same taste signals"| Qloo
+```
+
+### Request lifecycle
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Family
+    participant UI as Browser
+    participant API as /api/build
+    participant C as Curator (Groq)
+    participant Q as Qloo
+    participant D as Designer (Groq)
+    participant IT as iTunes
+
+    Family->>UI: "Rose, born 1942, Brooklyn, loved Ella Fitzgerald…"
+    UI->>API: POST intake
+    API->>C: system prompt + person
+    C->>Q: search_qloo (batched names)
+    Q-->>C: entity ids
+    C->>Q: taste_fingerprint (urn:tag)
+    par discover 8 domains in parallel
+        C->>Q: insights music / film / tv / stars
+        C->>Q: insights books / brands / destinations / places
+    end
+    Q-->>C: ranked entities with affinity
+    opt results skew modern
+        C->>Q: rank_by_taste (era names, filter.results.entities)
+    end
+    C->>API: finish(picks)
+    API-->>UI: stream tool events (agent theater)
+    API->>D: candidates + person
+    D-->>API: portrait, whys, session, kit (validated JSON)
+    API->>IT: find song previews
+    API-->>UI: profile
+    UI->>UI: save to localStorage, open Studio
+```
+
 ## Stack
 
-Next.js 16 (App Router) · TypeScript · Tailwind CSS v4 · Vercel AI SDK (`generateText` tool loop, structured output) · Groq (`openai/gpt-oss-120b`, fallback `moonshotai/kimi-k2-instruct-0905`) · Qloo Insights API · React Three Fiber + drei · motion · Vercel.
+Next.js 16 (App Router) · TypeScript · Tailwind CSS v4 · Vercel AI SDK (`generateText` tool loop, structured output) · Groq (`openai/gpt-oss-120b`, fallback `openai/gpt-oss-20b`) · Qloo Insights API · React Three Fiber + drei · motion · Vercel.
 
 ## Run it locally
 

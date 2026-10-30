@@ -5,6 +5,7 @@ import { findTrack } from "../itunes";
 import { groq, MODELS } from "../llm";
 import {
   DOMAINS,
+  DOMAIN_LABELS,
   type AgentEvent,
   type Domain,
   type Entity,
@@ -16,7 +17,7 @@ import {
   type Track,
   type WorldItem,
 } from "../types";
-import { createContext, type RunContext } from "./context";
+import { createContext, domainParams, previewOf, register, traced, type RunContext } from "./context";
 import { CURATOR_SYSTEM, DESIGNER_SYSTEM, REFLECT_SYSTEM, describePerson } from "./prompts";
 import { curatorTools } from "./tools";
 
@@ -26,7 +27,8 @@ const PICK_TARGETS: Record<Domain, number> = {
   tv: 4,
   stars: 6,
   books: 3,
-  brands: 5,
+  // Qloo brand affinities skew to modern brands, so only family-named brands are kept.
+  brands: 0,
   destinations: 3,
   places: 4,
 };
@@ -109,22 +111,133 @@ async function runAgent(ctx: RunContext, system: string, prompt: string, maxStep
       });
       return;
     } catch (err) {
-      ctx.emit({ type: "thought", text: `Model ${model} stumbled (${errorText(err).slice(0, 120)}). Recovering.` });
+      console.error(`[curator] ${model} failed:`, errorText(err));
       if (ctx.registry.size > 12) return;
+      ctx.emit({ type: "thought", text: "That plan didn't go through. Trying a different approach." });
     }
   }
 }
 
+const norm = (s: string) =>
+  s
+    .toLowerCase()
+    .normalize("NFKD")
+    .replace(/[^a-z0-9 ]/g, "")
+    .trim();
+
+/**
+ * The safety net: if the model can't drive its tools, the server walks the same
+ * Qloo path deterministically, so a family never leaves with nothing.
+ */
+async function backupCurate(ctx: RunContext) {
+  const names = ctx.intake.loves
+    .split(/[,;\n]|\band\b/)
+    .map((s) => s.trim())
+    .filter((s) => s.length > 1)
+    .slice(0, 10);
+  const lookIn: Domain[] = ["music", "film", "tv", "stars", "brands"];
+  await traced(ctx, "search_qloo", "Finding the family's favourites in Qloo", async () => {
+    const found: Entity[] = [];
+    await pMap(names, 4, async (name) => {
+      const hits = (await Promise.all(lookIn.map((d) => ctx.qloo.search(name, d, 2).catch(() => [] as Entity[])))).flat();
+      register(ctx, hits);
+      const q = norm(name);
+      const best = hits
+        .filter((h) => norm(h.name) === q || norm(h.name).includes(q) || q.includes(norm(h.name)))
+        .sort((a, b) => (b.popularity ?? 0) - (a.popularity ?? 0))[0];
+      if (best) {
+        ctx.seeds.add(best.id);
+        found.push(best);
+      }
+    });
+    return { result: null, summary: `Resolved ${found.length} of ${names.length} names in Qloo's graph`, preview: previewOf(found) };
+  });
+  const seeds = [...ctx.seeds].slice(0, 8);
+  if (seeds.length === 0) return;
+  await traced(ctx, "taste_fingerprint", "Reading what ties their favourites together", async () => {
+    const tags = (await ctx.qloo.tasteTags(seeds, 30)).filter((t) => t.name);
+    const max = Math.max(...tags.map((t) => t.weight), 0.0001);
+    ctx.tasteTags = tags.map((t) => ({ name: t.name, weight: Math.round((t.weight / max) * 100) / 100 }));
+    return { result: null, summary: `Taste fingerprint: ${tags.slice(0, 4).map((t) => t.name).join(", ")}` };
+  });
+  await Promise.all(
+    DOMAINS.map((domain) =>
+      traced(ctx, "discover", `Exploring ${DOMAIN_LABELS[domain].toLowerCase()} they'd love`, async () => {
+        const entities = (
+          await ctx.qloo.insights(domain, {
+            ...domainParams(domain, ctx),
+            "signal.interests.entities": seeds,
+            "filter.exclude.entities": ctx.exclude,
+            take: 12,
+          })
+        ).filter((e) => !ctx.seeds.has(e.id));
+        register(ctx, entities);
+        return {
+          result: null,
+          summary: entities.length ? `${entities.length} picks, led by ${entities[0].name}` : `Nothing came back for ${domain}`,
+          preview: previewOf(entities),
+        };
+      }),
+    ),
+  );
+}
+
 /** If the agent ran out of steps before calling finish, keep the strongest results per domain. */
 function fillPicks(ctx: RunContext) {
+  const seenNames = new Set([...ctx.seeds].map((id) => norm(ctx.registry.get(id)?.name ?? "")));
   for (const domain of DOMAINS) {
-    const have = ctx.picks[domain] ?? [];
+    // Drop near-duplicates of things already in their world (e.g. three "Coney Island" places).
+    const have = (ctx.picks[domain] ?? []).filter((id) => {
+      const n = norm(ctx.registry.get(id)?.name ?? "");
+      if (seenNames.has(n)) return false;
+      seenNames.add(n);
+      return true;
+    });
+    ctx.picks[domain] = have;
     if (have.length >= Math.min(3, PICK_TARGETS[domain])) continue;
     const ranked = [...ctx.registry.values()]
-      .filter((e) => e.domain === domain && !ctx.seeds.has(e.id) && !ctx.exclude.includes(e.id))
+      .filter((e) => e.domain === domain && e.affinity !== null && !ctx.seeds.has(e.id) && !ctx.exclude.includes(e.id))
       .sort((a, b) => (b.affinity ?? 0) - (a.affinity ?? 0) || (b.popularity ?? 0) - (a.popularity ?? 0));
-    ctx.picks[domain] = [...new Set([...have, ...ranked.map((e) => e.id)])].slice(0, PICK_TARGETS[domain]);
+    const extra = ranked.filter((e) => {
+      const n = norm(e.name);
+      if (seenNames.has(n)) return false;
+      seenNames.add(n);
+      return true;
+    });
+    ctx.picks[domain] = [...have, ...extra.map((e) => e.id)].slice(0, PICK_TARGETS[domain]);
   }
+}
+
+/** Explore, in parallel, any domain the agent never reached, so every world covers all eight. */
+async function topUp(ctx: RunContext) {
+  const cultural = new Set<Domain>(["music", "film", "tv", "stars", "books"]);
+  const seeds = [...ctx.seeds].filter((id) => cultural.has(ctx.registry.get(id)?.domain ?? "places")).slice(0, 8);
+  const signal = seeds.length ? seeds : [...ctx.seeds].slice(0, 8);
+  if (signal.length === 0) return;
+  const missing = DOMAINS.filter((d) => d !== "brands").filter(
+    // Only taste-graph results count; search hits like "Frank Sinatra, Jr." are not discoveries.
+    (d) => [...ctx.registry.values()].filter((e) => e.domain === d && e.affinity !== null && !ctx.seeds.has(e.id)).length < 3,
+  );
+  await Promise.all(
+    missing.map((domain) =>
+      traced(ctx, "discover", `Exploring ${DOMAIN_LABELS[domain].toLowerCase()} they'd love`, async () => {
+        const entities = (
+          await ctx.qloo.insights(domain, {
+            ...domainParams(domain, ctx),
+            "signal.interests.entities": signal,
+            "filter.exclude.entities": ctx.exclude,
+            take: 12,
+          })
+        ).filter((e) => !ctx.seeds.has(e.id));
+        register(ctx, entities);
+        return {
+          result: null,
+          summary: entities.length ? `${entities.length} picks, led by ${entities[0].name}` : `Nothing came back for ${domain}`,
+          preview: previewOf(entities),
+        };
+      }),
+    ),
+  );
 }
 
 function candidateList(ctx: RunContext, ids: { id: string; favourite: boolean }[]) {
@@ -147,20 +260,23 @@ async function designObject<T>(schema: z.ZodType<T>, system: string, prompt: str
     [MODELS.designer, false],
     [MODELS.fallback, false],
   ] as const) {
+    const t0 = Date.now();
     try {
       const { output } = await generateText({
         model: groq(model),
         system,
         prompt,
         output: Output.object({ schema }),
-        maxRetries: 2,
-        providerOptions: { groq: { reasoningEffort: "medium", structuredOutputs: structured } },
+        maxRetries: 1,
+        providerOptions: { groq: { reasoningEffort: "low", structuredOutputs: structured } },
       });
       ctx.llmSteps++;
+      console.log(`[designer] ${model} structured=${structured} ok in ${Date.now() - t0}ms`);
       if (output) return output as T;
     } catch (err) {
       lastErr = err;
-      ctx.emit({ type: "thought", text: `Designer retrying (${errorText(err).slice(0, 100)})` });
+      console.error(`[designer] ${model} structured=${structured} failed in ${Date.now() - t0}ms:`, errorText(err).slice(0, 300));
+      ctx.emit({ type: "thought", text: "Polishing the session wording." });
     }
   }
   throw lastErr ?? new Error("The designer could not compose a session");
@@ -235,7 +351,7 @@ function orderedIds(ctx: RunContext) {
   const out: { id: string; favourite: boolean }[] = [];
   for (const domain of DOMAINS) {
     const seeds = [...ctx.seeds].filter((id) => ctx.registry.get(id)?.domain === domain);
-    for (const id of [...seeds, ...(ctx.picks[domain] ?? [])]) {
+    for (const id of [...seeds, ...(domain === "brands" ? [] : (ctx.picks[domain] ?? []))]) {
       if (seen.has(id) || !ctx.registry.has(id)) continue;
       seen.add(id);
       out.push({ id, favourite: ctx.seeds.has(id) });
@@ -255,6 +371,8 @@ export async function buildProfile(intake: Intake, emit: (e: AgentEvent) => void
     `${describePerson(intake, ctx.era)}\n\nRebuild ${intake.name}'s cultural world. Start by resolving the names above.`,
     7,
   );
+  if (ctx.seeds.size === 0 || ctx.registry.size < 12) await backupCurate(ctx);
+  await topUp(ctx);
   fillPicks(ctx);
   if (ctx.registry.size === 0) throw new Error("Qloo returned nothing for this person. Try adding a few favourite names.");
 

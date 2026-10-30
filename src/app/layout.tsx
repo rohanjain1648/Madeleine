@@ -6,6 +6,7 @@ const fraunces = Fraunces({
   variable: "--font-fraunces",
   subsets: ["latin"],
   axes: ["SOFT", "WONK", "opsz"],
+  style: ["normal", "italic"],
   display: "swap",
 });
 
@@ -22,6 +23,20 @@ export const metadata: Metadata = {
   openGraph: {
     title: "Madeleine: the taste of memory",
     description: "Give them back the songs, films and faces of their youth.",
+    images: [
+      {
+        url: "/cover.jpg",
+        width: 1792,
+        height: 1024,
+        alt: "Madeleine: the taste of memory",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Madeleine: the taste of memory",
+    description: "Give them back the songs, films and faces of their youth.",
+    images: ["/cover.jpg"],
   },
 };
 

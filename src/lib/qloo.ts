@@ -102,18 +102,25 @@ export class Qloo {
     const json = await this.get<{ results?: { tags?: unknown[] } }>("/v2/insights", {
       "filter.type": "urn:tag",
       "signal.interests.entities": seedIds,
-      take,
+      take: Math.min(50, take * 2),
     });
-    return (json.results?.tags ?? []).map((t) => {
-      const tag = t as Record<string, unknown>;
-      const query = (tag.query ?? {}) as Record<string, unknown>;
-      return {
-        id: String(tag.id ?? tag.tag_id ?? ""),
-        name: String(tag.name ?? ""),
-        type: String(tag.subtype ?? tag.type ?? ""),
-        weight: Number(query.affinity ?? tag.affinity ?? tag.weight ?? 0),
-      };
-    });
+    // Keep cultural tags (genres, styles, themes); drop business tags like price or star rating.
+    const cultural = /genre|style|theme|music:qloo|artist:qloo|media/;
+    const seen = new Set<string>();
+    return (json.results?.tags ?? [])
+      .map((t) => {
+        const tag = t as Record<string, unknown>;
+        const query = (tag.query ?? {}) as Record<string, unknown>;
+        const name = String(tag.name ?? "").trim();
+        return {
+          id: String(tag.id ?? tag.tag_id ?? ""),
+          name: name.replace(/(^|[\s-])\p{L}/gu, (m) => m.toUpperCase()),
+          type: String(tag.subtype ?? tag.type ?? ""),
+          weight: Number(query.affinity ?? tag.affinity ?? tag.weight ?? 0),
+        };
+      })
+      .filter((t) => t.name && cultural.test(t.type) && !/label|museum|charity/i.test(t.name) && !seen.has(t.name.toLowerCase()) && seen.add(t.name.toLowerCase()))
+      .slice(0, take);
   }
 
   async findTags(query: string, take = 6): Promise<{ id: string; name: string; type: string }[]> {
@@ -125,7 +132,7 @@ export class Qloo {
       const tag = t as Record<string, unknown>;
       return {
         id: String(tag.id ?? tag.tag_id ?? ""),
-        name: String(tag.name ?? ""),
+        name: String(tag.name ?? "").trim(),
         type: String(tag.subtype ?? tag.type ?? ""),
       };
     });

@@ -24,7 +24,7 @@ Qloo is the engine, not decoration. A Groq-hosted Curator agent drives Qloo thro
 Every item shown is a real Qloo entity — the LLM can't invent one. The compare page gives the same model the same facts without Qloo, then scores both lists against the person's taste in one Qloo call per domain, on the same scale.
 
 ## How we built it
-Next.js 16 + TypeScript, Vercel AI SDK tool loop on Groq (gpt-oss-120b, Kimi K2 fallback), streamed NDJSON "agent theater", React Three Fiber hero, motion, Tailwind v4. Designed for two tempos: a rich Studio for families and a slow, large-type Session mode for the person. Fonts: Fraunces for warmth, Atkinson Hyperlegible (designed for low-vision readers) for everything you need to read. Profiles stay in the browser.
+Next.js 16 + TypeScript, Vercel AI SDK tool loop on Groq (gpt-oss-120b, gpt-oss-20b fallback), streamed NDJSON "agent theater", React Three Fiber hero, motion, Tailwind v4. Designed for two tempos: a rich Studio for families and a slow, large-type Session mode for the person. Fonts: Fraunces for warmth, Atkinson Hyperlegible (designed for low-vision readers) for everything you need to read. Profiles stay in the browser.
 
 ## Challenges
 Era correctness (artists have no release-year filter, so the agent combines Qloo affinity with historical names it ranks through Qloo), keeping the agent fast enough to watch live, and writing prompts that follow dementia-care communication practice.

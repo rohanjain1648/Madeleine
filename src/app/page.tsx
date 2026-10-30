@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { Hero } from "@/components/hero/Hero";
 import { Nav } from "@/components/ui/Nav";
-import { ShellMark } from "@/components/ui/Wordmark";
 import { DEMO_PEOPLE } from "@/lib/demo";
 
 const STEPS = [
@@ -132,11 +131,7 @@ export default function Home() {
         </section>
       </main>
       <footer className="border-t border-umber-800">
-        <div className="mx-auto flex w-full max-w-[1240px] flex-wrap items-center justify-between gap-4 px-5 py-10 text-sm text-smoke sm:px-8">
-          <p className="flex items-center gap-2">
-            <ShellMark className="size-5 text-amber" />
-            Built for the Qloo Agentic Hackathon with Qloo&apos;s Taste AI and Groq.
-          </p>
+        <div className="mx-auto flex w-full max-w-[1240px] flex-wrap items-center justify-center gap-4 px-5 py-10 text-center text-sm text-smoke sm:px-8">
           <p>Not medical advice. Madeleine supports carers; it does not treat dementia.</p>
         </div>
       </footer>

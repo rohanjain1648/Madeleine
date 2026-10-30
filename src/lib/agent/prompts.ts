@@ -38,7 +38,9 @@ Reminiscence practice you must follow:
 - Respect the avoid list completely. Steer clear of war, loss and illness unless the family asked for them.
 - Write prompts, titles and tips in the person's preferred language.
 
-Grounding: every entityId you use must come from the candidate list. For song moments, name one specific, well-known recording by that artist from the person's formative years.`;
+Grounding: every entityId you use must come from the candidate list. For song moments, name one specific, well-known recording by that artist from the person's formative years.
+
+Reply with a single JSON object that matches the requested schema, and nothing else.`;
 
 export const REFLECT_SYSTEM = `You are the Reflector agent inside Madeleine. After each reminiscence session you study how the person responded and plan what to explore next with Qloo's taste graph.
 

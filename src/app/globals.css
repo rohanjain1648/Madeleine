@@ -1,26 +1,301 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+/*
+  Madeleine design tokens.
+  A darkened living room lit by a projector: umber walls, paper-white light,
+  and one Kodachrome colour per kind of memory so the colour of a card tells you what it is.
+*/
+@theme {
+  --color-umber-950: #120c0a;
+  --color-umber-900: #1b1310;
+  --color-umber-850: #221814;
+  --color-umber-800: #2b1f1a;
+  --color-umber-700: #3c2c24;
+  --color-umber-600: #5a4334;
+  --color-paper: #f3e7cf;
+  --color-paper-dim: #dccab0;
+  --color-smoke: #b7a28a;
+  --color-amber: #f2a53b;
+  --color-amber-glow: #ffcf7a;
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
+  --color-music: #f2c14e;
+  --color-film: #d8553a;
+  --color-tv: #4fa39c;
+  --color-stars: #e3958a;
+  --color-books: #a98bc9;
+  --color-brands: #98b77a;
+  --color-destinations: #72a3cf;
+  --color-places: #e9a866;
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+  --color-lit: #ffcf7a;
+  --color-engaged: #98b77a;
+  --color-neutral: #8d7c6c;
+  --color-distressed: #8fb3d9;
+
+  --font-display: var(--font-fraunces), "Iowan Old Style", Georgia, serif;
+  --font-sans: var(--font-atkinson), "Segoe UI", system-ui, sans-serif;
+
+  --ease-soft: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-film: cubic-bezier(0.65, 0, 0.35, 1);
+
+  --animate-develop: develop 1.6s var(--ease-soft) both;
+  --animate-spin-slow: spin 6s linear infinite;
+  --animate-kenburns: kenburns 24s ease-in-out infinite alternate;
+  --animate-flicker: flicker 7s steps(1) infinite;
+
+  @keyframes develop {
+    0% {
+      filter: blur(10px) sepia(1) brightness(0.35) contrast(0.8);
+      opacity: 0;
+      transform: scale(1.03);
+    }
+    40% {
+      opacity: 1;
+    }
+    100% {
+      filter: none;
+      opacity: 1;
+      transform: none;
+    }
+  }
+  @keyframes kenburns {
+    from {
+      transform: scale(1.04) translate3d(-1.5%, -1%, 0);
+    }
+    to {
+      transform: scale(1.16) translate3d(1.5%, 1.5%, 0);
+    }
+  }
+  @keyframes flicker {
+    0%,
+    100% {
+      opacity: 1;
+    }
+    47% {
+      opacity: 0.93;
+    }
+    48% {
+      opacity: 1;
+    }
+    82% {
+      opacity: 0.96;
+    }
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+@layer base {
+  html {
+    background: var(--color-umber-900);
+    color: var(--color-paper);
+    color-scheme: dark;
+    scroll-behavior: smooth;
+  }
+  body {
+    font-family: var(--font-sans);
+    font-size: 1.0625rem;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+  ::selection {
+    background: var(--color-amber);
+    color: var(--color-umber-950);
+  }
+  :focus-visible {
+    outline: 2px solid var(--color-amber-glow);
+    outline-offset: 3px;
+  }
+  button {
+    cursor: pointer;
+  }
+}
+
+@layer components {
+  .display {
+    font-family: var(--font-display);
+    font-variation-settings:
+      "SOFT" 100,
+      "WONK" 1,
+      "opsz" 144;
+    letter-spacing: -0.02em;
+    line-height: 0.98;
+  }
+  .display-soft {
+    font-family: var(--font-display);
+    font-variation-settings:
+      "SOFT" 100,
+      "WONK" 0,
+      "opsz" 36;
+    letter-spacing: -0.01em;
+  }
+
+  /* Film grain over everything, like old stock in a projector. */
+  .grain {
+    pointer-events: none;
+    position: fixed;
+    inset: -50%;
+    z-index: 60;
+    opacity: 0.075;
+    mix-blend-mode: overlay;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='220' height='220'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 .9 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+    animation: grain 0.9s steps(4) infinite;
+  }
+  @keyframes grain {
+    0% {
+      transform: translate(0, 0);
+    }
+    25% {
+      transform: translate(-3%, 2%);
+    }
+    50% {
+      transform: translate(2%, -3%);
+    }
+    75% {
+      transform: translate(-2%, -2%);
+    }
+  }
+
+  .vignette {
+    pointer-events: none;
+    position: fixed;
+    inset: 0;
+    z-index: 59;
+    background: radial-gradient(ellipse at 50% 40%, transparent 55%, rgb(10 6 5 / 0.55) 100%);
+  }
+
+  /* The physical objects each kind of memory arrives in. */
+  .slide-mount {
+    background:
+      linear-gradient(160deg, #f6ecd6, #e4d3b4),
+      #efe2c8;
+    padding: 14px 14px 30px;
+    border-radius: 6px;
+    box-shadow:
+      0 1px 0 rgb(255 255 255 / 0.6) inset,
+      0 18px 40px -18px rgb(0 0 0 / 0.8);
+  }
+  .slide-window {
+    border-radius: 10px / 14px;
+    overflow: hidden;
+    box-shadow: 0 0 0 2px rgb(60 40 25 / 0.35) inset;
+  }
+  .polaroid {
+    background: #f8f3e8;
+    padding: 10px 10px 38px;
+    box-shadow: 0 22px 40px -20px rgb(0 0 0 / 0.9);
+  }
+  .postcard {
+    background:
+      repeating-linear-gradient(0deg, transparent 0 22px, rgb(114 163 207 / 0.12) 22px 23px),
+      #f1e6cf;
+    box-shadow: 0 18px 36px -18px rgb(0 0 0 / 0.85);
+  }
+  .ticket {
+    background: #f4e3c4;
+    -webkit-mask:
+      radial-gradient(circle 9px at 0 50%, transparent 98%, #000) left / 51% 100% no-repeat,
+      radial-gradient(circle 9px at 100% 50%, transparent 98%, #000) right / 51% 100% no-repeat;
+    mask:
+      radial-gradient(circle 9px at 0 50%, transparent 98%, #000) left / 51% 100% no-repeat,
+      radial-gradient(circle 9px at 100% 50%, transparent 98%, #000) right / 51% 100% no-repeat;
+  }
+  .crt {
+    background: linear-gradient(145deg, #3a2b23, #1f1612);
+    padding: 12px;
+    border-radius: 22px;
+    box-shadow:
+      0 0 0 1px rgb(255 255 255 / 0.05) inset,
+      0 20px 40px -20px rgb(0 0 0 / 0.9);
+  }
+  .crt-screen {
+    border-radius: 18px / 26px;
+    overflow: hidden;
+    position: relative;
+  }
+  .crt-screen::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: repeating-linear-gradient(0deg, rgb(0 0 0 / 0.18) 0 1px, transparent 1px 3px);
+    mix-blend-mode: multiply;
+    pointer-events: none;
+  }
+  .vinyl {
+    background:
+      radial-gradient(circle at 50% 50%, var(--label, #d8553a) 0 17%, #111 17.5% 19%, transparent 19.5%),
+      repeating-radial-gradient(circle at 50% 50%, #0d0d0d 0 1.5px, #1b1b1b 1.5px 3px),
+      #111;
+    border-radius: 9999px;
+    box-shadow:
+      0 0 0 1px rgb(255 255 255 / 0.04) inset,
+      0 12px 30px -10px rgb(0 0 0 / 0.9);
+  }
+  .vinyl::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background: conic-gradient(from 30deg, transparent 0 20%, rgb(255 255 255 / 0.09) 25%, transparent 32% 70%, rgb(255 255 255 / 0.07) 75%, transparent 82%);
+  }
+
+  .glass {
+    background: linear-gradient(180deg, rgb(43 31 26 / 0.72), rgb(27 19 16 / 0.6));
+    backdrop-filter: blur(14px) saturate(1.1);
+    border: 1px solid rgb(243 231 207 / 0.08);
+  }
+
+  .light-button {
+    position: relative;
+    isolation: isolate;
+    background: radial-gradient(120% 140% at 30% 0%, var(--color-amber-glow), var(--color-amber) 55%, #c97a1c);
+    color: var(--color-umber-950);
+    box-shadow:
+      0 0 0 1px rgb(255 220 160 / 0.4) inset,
+      0 10px 30px -8px rgb(242 165 59 / 0.55);
+    transition:
+      transform 0.25s var(--ease-soft),
+      box-shadow 0.25s var(--ease-soft);
+  }
+  .light-button:hover {
+    box-shadow:
+      0 0 0 1px rgb(255 220 160 / 0.5) inset,
+      0 14px 44px -6px rgb(242 165 59 / 0.75);
+  }
+  .light-button:active {
+    transform: translateY(1px) scale(0.99);
+  }
+
+  .scrollbar-none {
+    scrollbar-width: none;
+  }
+  .scrollbar-none::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .grain {
+    animation: none;
+  }
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+@media print {
+  .grain,
+  .vignette,
+  .no-print {
+    display: none !important;
+  }
+  html,
+  body {
+    background: #fff !important;
+    color: #1b1310 !important;
+  }
 }

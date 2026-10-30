@@ -23,7 +23,10 @@ export function Hero() {
           transition={{ duration: 1.4, ease: [0.22, 1, 0.36, 1], delay: 0.2 }}
           className="display max-w-[13ch] text-[clamp(3.2rem,9vw,7.5rem)] text-paper [text-shadow:0_4px_40px_rgb(0_0_0/0.5)]"
         >
-          When memories fade, the songs stay.
+          When memories fade,{" "}
+          <span className="italic text-transparent bg-clip-text bg-gradient-to-r from-amber-glow via-music to-amber drop-shadow-[0_4px_30px_rgba(242,193,78,0.4)]">
+            the songs stay.
+          </span>
         </motion.h1>
         <motion.div
           initial={{ opacity: 0, y: 16 }}
@@ -32,19 +35,29 @@ export function Hero() {
           className="pointer-events-auto mt-8 max-w-[56ch]"
         >
           <p className="text-[1.2rem] leading-relaxed text-paper-dim">
-            Madeleine is an AI agent that rebuilds the world someone with dementia grew up in: the records, the pictures, the
-            faces and the everyday things, matched to their own taste with Qloo. Then it turns that world into gentle
-            sessions that learn from every smile.
+            Madeleine is an AI agent that rebuilds the cultural world someone with dementia grew up in: the{" "}
+            <span className="text-music font-medium">records</span>, the{" "}
+            <span className="text-film font-medium">pictures</span>, the{" "}
+            <span className="text-stars font-medium">faces</span> and the{" "}
+            <span className="text-places font-medium">everyday things</span>, matched to their own taste with{" "}
+            <span className="font-semibold text-paper underline decoration-amber/50 underline-offset-4">Qloo</span>.
+            Then it turns that world into gentle sessions that{" "}
+            <em className="font-editorial-italic text-amber-glow text-[1.28rem] font-medium">
+              learn from every smile
+            </em>.
           </p>
           <div className="mt-8 flex flex-wrap items-center gap-3">
-            <Link href="/new" className="light-button rounded-full px-7 py-3.5 text-lg font-semibold">
+            <Link
+              href="/new"
+              className="light-button rounded-full px-7 py-3.5 text-lg font-semibold shadow-[0_0_28px_rgba(242,165,59,0.3)] hover:shadow-[0_0_40px_rgba(242,165,59,0.5)] transition-all"
+            >
               Start a profile
             </Link>
             <Link
               href="/new?demo=rose&go=1"
-              className="rounded-full border border-paper/25 bg-umber-950/40 px-6 py-3.5 text-lg text-paper backdrop-blur transition-colors hover:border-amber hover:text-amber-glow"
+              className="group rounded-full border border-paper/25 bg-umber-950/50 px-6 py-3.5 text-lg text-paper backdrop-blur transition-all hover:border-amber hover:bg-umber-900/80 hover:text-amber-glow hover:shadow-[0_0_24px_rgba(242,165,59,0.2)]"
             >
-              Watch it build Rose&apos;s world
+              Watch it build <span className="font-editorial-italic text-amber group-hover:text-amber-glow">Rose&apos;s</span> world →
             </Link>
           </div>
         </motion.div>

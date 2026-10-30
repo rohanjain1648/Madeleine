@@ -35,44 +35,52 @@ const PICK_TARGETS: Record<Domain, number> = {
 
 const MOMENT_KINDS = ["song", "film", "tv", "star", "book", "brand", "place", "story", "sensory"] as const;
 
+// Every field has a safe default: a partial answer from the model still yields a usable session.
+const str = (d: string) => z.string().catch(d);
+const strs = () => z.array(z.string().catch("")).catch([]);
+
 const MomentSchema = z.object({
-  kind: z.enum(MOMENT_KINDS),
-  entityId: z.string().describe("Candidate id this moment is about, or an empty string for story/sensory moments"),
-  title: z.string(),
-  song: z.string().describe("For song moments: one specific recording title. Otherwise an empty string."),
-  prompts: z.array(z.string()).describe("2-3 gentle conversation invitations"),
-  caregiverTip: z.string(),
-  sensory: z.string().describe("A taste, scent or texture to bring in, or an empty string"),
-  minutes: z.number(),
+  kind: z.enum(MOMENT_KINDS).catch("story"),
+  entityId: str("").describe("Candidate id this moment is about, or an empty string for story/sensory moments"),
+  title: str(""),
+  song: str("").describe("For song moments: one specific recording title. Otherwise an empty string."),
+  prompts: strs().describe("2-3 gentle conversation invitations"),
+  caregiverTip: str("Go gently and follow their lead."),
+  sensory: str("").describe("A taste, scent or texture to bring in, or an empty string"),
+  minutes: z.coerce.number().catch(3),
 });
 
 const SessionSchema = z.object({
-  title: z.string().describe("A warm title, e.g. 'Saturday night at the Paramount'"),
-  theme: z.string().describe("One sentence on the thread running through the session"),
-  moments: z.array(MomentSchema),
+  title: str("A gentle afternoon").describe("A warm title, e.g. 'Saturday night at the Paramount'"),
+  theme: str("").describe("One sentence on the thread running through the session"),
+  moments: z.array(MomentSchema).catch([]),
+});
+
+const WorldNoteSchema = z.object({
+  entityId: str(""),
+  why: str("").describe("Under 18 words: why this belongs in their world"),
+  songs: strs().describe("For music artists: 2 well-known recordings from their era. Otherwise empty."),
 });
 
 const DesignSchema = z.object({
-  portrait: z.string().describe("Two sentences painting the cultural world they grew up in"),
-  tasteSummary: z.string().describe("One sentence on what their taste says about them"),
-  world: z.array(
-    z.object({
-      entityId: z.string(),
-      why: z.string().describe("Under 18 words: why this belongs in their world"),
-      songs: z.array(z.string()).describe("For music artists: 2 well-known recordings from their era. Otherwise empty."),
-    }),
-  ),
-  session: SessionSchema,
-  sensoryKit: z.array(z.object({ item: z.string(), why: z.string() })),
-  outings: z.array(z.object({ entityId: z.string(), why: z.string() })),
-  avoid: z.array(z.string()),
+  portrait: str("").describe("Two sentences painting the cultural world they grew up in"),
+  tasteSummary: str("").describe("One sentence on what their taste says about them"),
+  world: z.array(WorldNoteSchema).catch([]),
+  session: SessionSchema.catch({ title: "A gentle afternoon", theme: "", moments: [] }),
+  sensoryKit: z.array(z.object({ item: str(""), why: str("") })).catch([]),
+  outings: z.array(z.object({ entityId: str(""), why: str("") })).catch([]),
+  avoid: strs(),
 });
 
 const AdaptSchema = z.object({
-  learned: z.array(z.string()).describe("3-5 short notes on what the last session taught you, in plain language"),
-  world: z.array(z.object({ entityId: z.string(), why: z.string(), songs: z.array(z.string()) })),
-  session: SessionSchema,
+  learned: strs().describe("3-5 short notes on what the last session taught you, in plain language"),
+  world: z.array(WorldNoteSchema).catch([]),
+  session: SessionSchema.catch({ title: "A gentle afternoon", theme: "", moments: [] }),
 });
+
+const MOMENT_SKELETON = '{"kind":"song|film|tv|star|book|brand|place|story|sensory","entityId":"<candidate id or empty>","title":"","song":"<recording title for song moments, else empty>","prompts":["",""],"caregiverTip":"","sensory":"","minutes":3}';
+const DESIGN_SKELETON = '{"portrait":"","tasteSummary":"","world":[{"entityId":"","why":"","songs":[""]}],"session":{"title":"","theme":"","moments":[' + MOMENT_SKELETON + ']},"sensoryKit":[{"item":"","why":""}],"outings":[{"entityId":"","why":""}],"avoid":[""]}';
+const ADAPT_SKELETON = '{"learned":[""],"world":[{"entityId":"","why":"","songs":[""]}],"session":{"title":"","theme":"","moments":[' + MOMENT_SKELETON + ']}}';
 
 async function pMap<T, R>(items: T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
   const out: R[] = new Array(items.length);
@@ -91,11 +99,15 @@ function errorText(err: unknown) {
   return err instanceof Error ? err.message : String(err);
 }
 
-async function runAgent(ctx: RunContext, system: string, prompt: string, maxSteps: number) {
+async function runAgent(ctx: RunContext, system: string, prompt: string, maxSteps: number, budgetMs = 40000) {
   const tools = curatorTools(ctx);
+  // A time budget keeps the live demo snappy; the deterministic top-up fills any domain the agent did not reach.
+  const deadline = AbortSignal.timeout(budgetMs);
   for (const model of [MODELS.curator, MODELS.fallback]) {
+    if (deadline.aborted) return;
     try {
       await generateText({
+        abortSignal: deadline,
         model: groq(model),
         system,
         prompt,
@@ -111,6 +123,10 @@ async function runAgent(ctx: RunContext, system: string, prompt: string, maxStep
       });
       return;
     } catch (err) {
+      if (deadline.aborted) {
+        ctx.emit({ type: "thought", text: "Time to put it together. Filling in the rest from the taste graph." });
+        return;
+      }
       console.error(`[curator] ${model} failed:`, errorText(err));
       if (ctx.registry.size > 12) return;
       ctx.emit({ type: "thought", text: "That plan didn't go through. Trying a different approach." });
@@ -253,33 +269,86 @@ function candidateList(ctx: RunContext, ids: { id: string; favourite: boolean }[
   return [...byDomain.entries()].map(([d, lines]) => `${d.toUpperCase()}\n${lines.join("\n")}`).join("\n\n");
 }
 
-async function designObject<T>(schema: z.ZodType<T>, system: string, prompt: string, ctx: RunContext): Promise<T> {
+function extractJson(text: string): unknown {
+  const start = text.indexOf("{");
+  const end = text.lastIndexOf("}");
+  if (start < 0 || end <= start) throw new Error("No JSON in the designer reply");
+  return JSON.parse(text.slice(start, end + 1));
+}
+
+/**
+ * Structured output first; if Groq rejects it, ask for plain JSON against a skeleton and
+ * parse it leniently. The schemas fill any gap with safe defaults.
+ */
+async function designObject<T>(
+  schema: z.ZodType<T>,
+  skeleton: string,
+  system: string,
+  prompt: string,
+  ctx: RunContext,
+): Promise<T> {
   let lastErr: unknown;
-  for (const [model, structured] of [
-    [MODELS.designer, true],
-    [MODELS.designer, false],
-    [MODELS.fallback, false],
-  ] as const) {
-    const t0 = Date.now();
+  const t0 = Date.now();
+  try {
+    const { output } = await generateText({
+      model: groq(MODELS.designer),
+      system,
+      prompt,
+      output: Output.object({ schema }),
+      maxRetries: 1,
+      providerOptions: { groq: { reasoningEffort: "low", structuredOutputs: true } },
+    });
+    ctx.llmSteps++;
+    console.log(`[designer] structured ok in ${Date.now() - t0}ms`);
+    if (output) return output as T;
+  } catch (err) {
+    lastErr = err;
+    console.error(`[designer] structured failed in ${Date.now() - t0}ms:`, errorText(err).slice(0, 300));
+  }
+  for (const model of [MODELS.designer, MODELS.fallback]) {
+    const t1 = Date.now();
     try {
-      const { output } = await generateText({
+      ctx.emit({ type: "thought", text: "Polishing the session wording." });
+      const { text } = await generateText({
         model: groq(model),
         system,
-        prompt,
-        output: Output.object({ schema }),
+        prompt: `${prompt}
+
+Return only one JSON object with exactly this shape (fill every field):
+${skeleton}`,
         maxRetries: 1,
-        providerOptions: { groq: { reasoningEffort: "low", structuredOutputs: structured } },
+        providerOptions: { groq: { reasoningEffort: "low" } },
       });
       ctx.llmSteps++;
-      console.log(`[designer] ${model} structured=${structured} ok in ${Date.now() - t0}ms`);
-      if (output) return output as T;
+      const parsed = schema.parse(extractJson(text));
+      console.log(`[designer] ${model} json ok in ${Date.now() - t1}ms`);
+      return parsed;
     } catch (err) {
       lastErr = err;
-      console.error(`[designer] ${model} structured=${structured} failed in ${Date.now() - t0}ms:`, errorText(err).slice(0, 300));
-      ctx.emit({ type: "thought", text: "Polishing the session wording." });
+      console.error(`[designer] ${model} json failed in ${Date.now() - t1}ms:`, errorText(err).slice(0, 300));
     }
   }
   throw lastErr ?? new Error("The designer could not compose a session");
+}
+
+/** If the model returns no usable moments, compose a simple session from their world. */
+function fallbackMoments(ctx: RunContext, ids: { id: string; favourite: boolean }[], notes: { entityId: string; songs: string[] }[]) {
+  const name = ctx.intake.name;
+  const pick = (d: Domain) => ids.map((x) => ctx.registry.get(x.id)).filter((e): e is Entity => !!e && e.domain === d);
+  const music = pick("music");
+  const songOf = (e: Entity | undefined) => notes.find((n) => n.entityId === e?.id)?.songs[0] ?? "";
+  const film = pick("film")[0];
+  const star = pick("stars")[0];
+  const moment = (m: Partial<z.infer<typeof MomentSchema>>): z.infer<typeof MomentSchema> => ({
+    kind: "story", entityId: "", title: "", song: "", prompts: [], caregiverTip: "Go gently and follow their lead.", sensory: "", minutes: 3, ...m,
+  });
+  return [
+    music[0] && moment({ kind: "song", entityId: music[0].id, title: `A song from ${music[0].name}`, song: songOf(music[0]), prompts: [`This is ${music[0].name}. Let's just listen together.`, "How does this one make you feel?"], caregiverTip: "Keep the volume low and watch for a tapping foot." }),
+    film && moment({ kind: "film", entityId: film.id, title: film.name, prompts: [`${film.name} was showing at the pictures back then.`, "Tell me about going to the cinema."] }),
+    moment({ kind: "story", title: `${name}'s story`, prompts: [`Tell me about growing up in ${ctx.intake.hometown}.`, "What was a perfect Saturday like?"] }),
+    star && moment({ kind: "star", entityId: star.id, title: star.name, prompts: [`Here is ${star.name}.`, "What did you think of them?"] }),
+    music[1] && moment({ kind: "song", entityId: music[1].id, title: `Close with ${music[1].name}`, song: songOf(music[1]), prompts: ["Let's end with something gentle.", "Sing along if you like."] }),
+  ].filter(Boolean) as z.infer<typeof MomentSchema>[];
 }
 
 const kindDomain: Partial<Record<MomentKind, Domain>> = {
@@ -380,6 +449,7 @@ export async function buildProfile(intake: Intake, emit: (e: AgentEvent) => void
   const ids = orderedIds(ctx);
   const design = await designObject(
     DesignSchema,
+    DESIGN_SKELETON,
     DESIGNER_SYSTEM,
     `${describePerson(intake, ctx.era)}\n\nTaste fingerprint from Qloo: ${ctx.tasteTags
       .slice(0, 12)
@@ -391,6 +461,10 @@ export async function buildProfile(intake: Intake, emit: (e: AgentEvent) => void
     ctx,
   );
 
+  if (design.session.moments.filter((m) => m.title && m.prompts.length).length < 3) {
+    design.session.moments = fallbackMoments(ctx, ids, design.world);
+  }
+  if (!design.portrait) design.portrait = `The world ${intake.name} grew up in, rebuilt from the things the family remembered.`;
   emit({ type: "phase", phase: "hydrate", label: "Finding the recordings and pictures" });
   const [world, moments] = await Promise.all([
     buildWorld(ctx, ids, design.world, design.outings),
@@ -490,6 +564,7 @@ export async function adaptProfile(profile: Profile, sessionId: string, emit: (e
   emit({ type: "phase", phase: "design", label: `The Designer is composing session ${session.number + 1}` });
   const design = await designObject(
     AdaptSchema,
+    ADAPT_SKELETON,
     DESIGNER_SYSTEM,
     `${describePerson(profile.intake, profile.era)}\n\nLast session: ${line("Lit up", lit)}. ${line("Upset", upset)}. ${line(
       "No response",

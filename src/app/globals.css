@@ -33,6 +33,7 @@
   --color-distressed: #8fb3d9;
 
   --font-display: var(--font-fraunces), "Iowan Old Style", Georgia, serif;
+  --font-serif: var(--font-newsreader), "Iowan Old Style", Georgia, serif;
   --font-sans: var(--font-atkinson), "Segoe UI", system-ui, sans-serif;
 
   --ease-soft: cubic-bezier(0.22, 1, 0.36, 1);
@@ -127,6 +128,25 @@
       "WONK" 0,
       "opsz" 36;
     letter-spacing: -0.01em;
+  }
+  .display em,
+  .display i,
+  .display-soft em,
+  .display-soft i,
+  .display .italic,
+  .display-soft .italic {
+    font-style: italic;
+    font-variation-settings:
+      "SOFT" 100,
+      "WONK" 1,
+      "opsz" 144;
+  }
+  .font-editorial {
+    font-family: var(--font-serif);
+  }
+  .font-editorial-italic {
+    font-family: var(--font-serif);
+    font-style: italic;
   }
 
   /* Film grain over everything, like old stock in a projector. */

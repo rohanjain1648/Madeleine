@@ -1,11 +1,18 @@
 import type { Metadata, Viewport } from "next";
-import { Atkinson_Hyperlegible_Next, Fraunces } from "next/font/google";
+import { Atkinson_Hyperlegible_Next, Fraunces, Newsreader } from "next/font/google";
 import "./globals.css";
 
 const fraunces = Fraunces({
   variable: "--font-fraunces",
   subsets: ["latin"],
   axes: ["SOFT", "WONK", "opsz"],
+  style: ["normal", "italic"],
+  display: "swap",
+});
+
+const newsreader = Newsreader({
+  variable: "--font-newsreader",
+  subsets: ["latin"],
   style: ["normal", "italic"],
   display: "swap",
 });
@@ -46,7 +53,7 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="en" className={`${fraunces.variable} ${atkinson.variable} h-full`}>
+    <html lang="en" className={`${fraunces.variable} ${newsreader.variable} ${atkinson.variable} h-full`}>
       <body className="min-h-full bg-umber-900 text-paper">
         {children}
         <div className="vignette" aria-hidden />

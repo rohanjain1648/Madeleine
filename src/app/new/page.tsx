@@ -76,13 +76,22 @@ function NewProfile() {
           className="mx-auto grid w-full max-w-[1240px] gap-12 px-5 pb-24 pt-8 sm:px-8 lg:grid-cols-[0.9fr_1.1fr]"
         >
           <div className="lg:sticky lg:top-10 lg:self-start">
-            <h1 className="display text-[clamp(2.6rem,6vw,4.6rem)]">Tell us a little about them.</h1>
+            <h1 className="display text-[clamp(2.6rem,6vw,4.6rem)]">
+              Tell us a little{" "}
+              <span className="italic text-transparent bg-clip-text bg-gradient-to-r from-amber via-stars to-amber-glow">
+                about them.
+              </span>
+            </h1>
             <p className="mt-6 max-w-[34ch] text-lg leading-relaxed text-paper-dim">
               A handful of names is enough. Madeleine&apos;s agents use Qloo&apos;s taste graph to find everything else they would
-              have loved between ten and thirty: the records, the pictures, the faces, the everyday things.
+              have loved between ten and thirty: the <span className="text-music font-medium">records</span>, the{" "}
+              <span className="text-film font-medium">pictures</span>, the{" "}
+              <span className="text-stars font-medium">faces</span>, and the{" "}
+              <span className="text-places font-medium">everyday things</span>.
             </p>
             <p className="mt-6 max-w-[34ch] text-paper-dim">
-              Don&apos;t worry about getting it right. Write it the way you&apos;d say it to a friend.
+              Don&apos;t worry about getting it right. Write it the way you&apos;d say it to a{" "}
+              <span className="font-editorial-italic text-amber-glow font-medium text-[1.1rem]">friend</span>.
             </p>
           </div>
           <div className="glass rounded-3xl p-6 sm:p-8">

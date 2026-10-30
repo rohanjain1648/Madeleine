@@ -24,6 +24,9 @@ export function Wordmark({ href = "/" }: { href?: string }) {
     <Link href={href} className="group inline-flex items-center gap-2.5 text-paper" aria-label="Madeleine home">
       <ShellMark className="size-7 text-amber transition-transform duration-500 group-hover:-rotate-12" />
       <span className="display text-[1.65rem] leading-none">Madeleine</span>
+      <span className="font-editorial-italic text-[0.88rem] text-smoke hidden sm:inline ml-0.5 opacity-75 group-hover:text-amber-glow group-hover:opacity-100 transition-all">
+        · the taste of memory
+      </span>
     </Link>
   );
 }
